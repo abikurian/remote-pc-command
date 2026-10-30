@@ -1,10 +1,16 @@
+import base64
+import ctypes
 import glob
+import io
 import logging
 import os
 import subprocess
+import time
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
+import mss
+from PIL import Image
 import psutil
 
 try:
@@ -25,7 +31,7 @@ LOCALAPPDATA = os.environ.get("LOCALAPPDATA", "")
 PROGRAMFILES = os.environ.get("ProgramFiles", "C:\\Program Files")
 PROGRAMFILES_X86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
 
-# Resolve Blender executable path across installed versions
+
 def _find_blender_path():
     blender_default = os.path.join(PROGRAMFILES, "Blender Foundation", "Blender 5.1", "blender.exe")
     if os.path.exists(blender_default):
@@ -33,21 +39,19 @@ def _find_blender_path():
     matches = glob.glob(os.path.join(PROGRAMFILES, "Blender Foundation", "Blender*", "blender.exe"))
     return matches[0] if matches else os.path.join(PROGRAMFILES, "Blender Foundation", "Blender", "blender.exe")
 
-# Resolve Antigravity executable path
+
 def _find_antigravity_path():
-    # 1. Check direct Antigravity.exe in local AppData
     direct_exe = os.path.join(LOCALAPPDATA, "Programs", "antigravity", "Antigravity.exe")
     if os.path.exists(direct_exe):
         return direct_exe
-    # 2. Check Antigravity IDE executable
     ide_exe = os.path.join(LOCALAPPDATA, "Programs", "Antigravity IDE", "Antigravity IDE.exe")
     if os.path.exists(ide_exe):
         return ide_exe
-    # 3. Check CLI launcher cmd script
     ide_cmd = os.path.join(LOCALAPPDATA, "Programs", "Antigravity IDE", "bin", "antigravity-ide.cmd")
     if os.path.exists(ide_cmd):
         return ide_cmd
     return "YOUR_ANTIGRAVITY_PATH_HERE"
+
 
 # Strict server-side app registry for target applications
 APP_REGISTRY = {
@@ -68,17 +72,18 @@ APP_REGISTRY = {
     },
 }
 
-# Prime psutil.cpu_percent so subsequent non-blocking calls return meaningful values
+# Prime psutil metrics
 psutil.cpu_percent(interval=None)
+
+# Network bandwidth tracking state
+prev_net_io = psutil.net_io_counters()
+prev_net_time = time.time()
 
 
 def get_system_stats():
-    """Collect hardware telemetry for CPU, RAM, and GPU.
+    """Collect hardware and network telemetry."""
+    global prev_net_io, prev_net_time
 
-    Returns:
-        dict: System telemetry with cpu_percent, ram_percent, gpu_load_percent,
-              and gpu_temp. Defaults GPU fields to 0 if unavailable or if an error occurs.
-    """
     cpu_percent = psutil.cpu_percent(interval=None)
     ram_percent = psutil.virtual_memory().percent
 
@@ -97,11 +102,27 @@ def get_system_stats():
         except Exception as exc:
             logger.warning("Failed to retrieve GPU statistics: %s", exc)
 
+    # Calculate Network Tx / Rx bandwidth (Mbps)
+    now = time.time()
+    curr_net_io = psutil.net_io_counters()
+    time_delta = max(0.1, now - prev_net_time)
+
+    bytes_recv = max(0, curr_net_io.bytes_recv - prev_net_io.bytes_recv)
+    bytes_sent = max(0, curr_net_io.bytes_sent - prev_net_io.bytes_sent)
+
+    net_dl_mbps = round((bytes_recv * 8) / (1024 * 1024 * time_delta), 2)
+    net_ul_mbps = round((bytes_sent * 8) / (1024 * 1024 * time_delta), 2)
+
+    prev_net_io = curr_net_io
+    prev_net_time = now
+
     return {
         "cpu_percent": cpu_percent,
         "ram_percent": ram_percent,
         "gpu_load_percent": gpu_load_percent,
         "gpu_temp": gpu_temp,
+        "net_dl": net_dl_mbps,
+        "net_ul": net_ul_mbps,
     }
 
 
@@ -113,24 +134,93 @@ def emit_system_metrics():
         socketio.sleep(2)
 
 
-background_task_started = False
+telemetry_task_started = False
+
+# Screen stream state
+screen_stream_active = False
+screen_stream_thread = None
+
+
+def screen_stream_worker():
+    """Background worker capturing primary monitor and emitting JPEG frames at <= 5 FPS."""
+    global screen_stream_active
+    logger.info("Screen stream worker started")
+
+    # Attach to active user desktop if running in interactive Windows session
+    if os.name == "nt":
+        try:
+            user32 = ctypes.windll.user32
+            hdesk = user32.OpenInputDesktop(0, False, 0x01FF)
+            if hdesk:
+                user32.SetThreadDesktop(hdesk)
+        except Exception as e:
+            logger.debug("Desktop attachment notice: %s", e)
+
+    try:
+        with mss.MSS() as sct:
+            monitor = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+            while screen_stream_active:
+                frame_start = time.time()
+                try:
+                    sct_img = sct.grab(monitor)
+                    img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
+                    # Downscale to max 800px width while preserving aspect ratio
+                    img.thumbnail((800, 600))
+
+                    buf = io.BytesIO()
+                    img.save(buf, format="JPEG", quality=50)
+                    encoded = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+                    socketio.emit("screen_frame", {"frame": encoded})
+                except Exception as exc:
+                    logger.warning("Screen grab error: %s", exc)
+
+                elapsed = time.time() - frame_start
+                # Throttle to max 5 FPS (0.2s minimum cycle)
+                sleep_time = max(0.05, 0.2 - elapsed)
+                socketio.sleep(sleep_time)
+    except Exception as err:
+        logger.exception("Screen stream encountered fatal error: %s", err)
+    finally:
+        screen_stream_active = False
+        logger.info("Screen stream worker stopped")
 
 
 @socketio.on("connect")
 def handle_connect():
-    global background_task_started
-    if not background_task_started:
+    global telemetry_task_started
+    if not telemetry_task_started:
         socketio.start_background_task(emit_system_metrics)
-        background_task_started = True
+        telemetry_task_started = True
+
+
+@socketio.on("start_screen_stream")
+def handle_start_screen_stream():
+    """Start streaming screen frames."""
+    global screen_stream_active
+    if not screen_stream_active:
+        screen_stream_active = True
+        socketio.start_background_task(screen_stream_worker)
+        socketio.emit("stream_status", {"active": True})
+
+
+@socketio.on("stop_screen_stream")
+def handle_stop_screen_stream():
+    """Stop streaming screen frames."""
+    global screen_stream_active
+    screen_stream_active = False
+    socketio.emit("stream_status", {"active": False})
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    # If no clients remain, stream will automatically be terminated by client stop event or can be stopped
+    pass
 
 
 @socketio.on("launch_app")
 def handle_launch_app(data):
-    """Handle secure application launch requests.
-
-    Expects data format: {'appId': '<registered_id>'}
-    Emits 'launch_status' with {'status': 'success' | 'error', 'appId': '<id>', 'message': '...'}.
-    """
+    """Handle secure application launch requests."""
     if not isinstance(data, dict):
         socketio.emit(
             "launch_status",
@@ -169,7 +259,6 @@ def handle_launch_app(data):
         return
 
     try:
-        # Non-blocking execution without shell=True
         subprocess.Popen([target_path], shell=False)
         logger.info("Successfully launched %s (%s)", app_name, app_id)
         socketio.emit(
