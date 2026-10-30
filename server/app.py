@@ -2,7 +2,7 @@ import glob
 import logging
 import os
 import subprocess
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_socketio import SocketIO
 import psutil
@@ -14,7 +14,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+CLIENT_DIST_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "client", "dist"))
+
+app = Flask(__name__, static_folder=CLIENT_DIST_DIR)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
@@ -195,6 +197,16 @@ def handle_launch_app(data):
 @app.route("/api/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "ok", "message": "Server is running"})
+
+
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_client(path):
+    """Serve compiled Vite/React static assets or fallback to index.html."""
+    target_file = os.path.join(CLIENT_DIST_DIR, path)
+    if path != "" and os.path.exists(target_file):
+        return send_from_directory(CLIENT_DIST_DIR, path)
+    return send_from_directory(CLIENT_DIST_DIR, "index.html")
 
 
 if __name__ == "__main__":

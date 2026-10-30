@@ -377,7 +377,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    const socket = io('http://' + window.location.hostname + ':5000')
+    const socket = io()
     socketRef.current = socket
 
     socket.on('connect', () => {
@@ -443,38 +443,24 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0e0e0e] text-white p-4 sm:p-8 flex flex-col justify-between selection:bg-orange-500/20 font-sans antialiased relative">
-      {/* Top Bar Header */}
-      <header className="max-w-6xl w-full mx-auto flex items-center justify-between pb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold tracking-[0.2em] uppercase text-orange-500 bg-orange-500/10 border border-orange-500/20 px-2.5 py-0.5 rounded-full">
-              COMMAND MATRIX
+    <main className="min-h-screen bg-black text-white p-4 sm:p-8 flex flex-col justify-between selection:bg-orange-500/20 font-sans antialiased relative">
+      {/* Top Header: Centered Telemetry Status Pill */}
+      <header className="max-w-6xl w-full mx-auto flex items-center justify-center pt-2 pb-6">
+        {isConnected ? (
+          <div className="flex items-center gap-2 rounded-full border border-[#232323] bg-[#161616] px-3.5 py-1 shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+            <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-medium">
+              Telemetry Active
             </span>
-            <span className="text-xs text-neutral-600 font-mono">v2.4.0</span>
           </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-1">
-            System Control Center
-          </h1>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {isConnected ? (
-            <div className="flex items-center gap-2 rounded-full border border-[#232323] bg-[#161616] px-3 py-1">
-              <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
-              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-medium">
-                Telemetry Active
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 rounded-full border border-[#232323] bg-[#161616] px-3 py-1">
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-[10px] text-neutral-500 uppercase tracking-widest font-medium">
-                Telemetry Offline
-              </span>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-full border border-[#232323] bg-[#161616] px-3.5 py-1 shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-[10px] text-neutral-500 uppercase tracking-widest font-medium">
+              Telemetry Offline
+            </span>
+          </div>
+        )}
       </header>
 
       {/* Main Responsive Grid Layout (Left: Telemetry & Resources, Right: Quick Launch & Actions) */}
