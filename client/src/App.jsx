@@ -10,6 +10,10 @@ import {
   Activity,
   Flame,
   ArrowUpRight,
+  ArrowDown,
+  ArrowUp,
+  Monitor,
+  X,
 } from 'lucide-react'
 
 const APPS = [
@@ -46,7 +50,6 @@ function RadialGauge({ value, stressLevel }) {
   const center = 96
   const activeTicks = Math.round((Math.max(0, Math.min(100, value)) / 100) * totalTicks)
 
-  // Generate radiating tick lines
   const ticks = useMemo(() => {
     return Array.from({ length: totalTicks }, (_, i) => {
       const angle = (i * 360) / totalTicks - 90
@@ -64,13 +67,17 @@ function RadialGauge({ value, stressLevel }) {
     })
   }, [activeTicks])
 
-  // Dynamic glow and pulse based on total stress
-  const glowIntensity = stressLevel > 70 ? 'shadow-[0_0_30px_rgba(249,115,22,0.45)]' : 'shadow-[0_0_15px_rgba(249,115,22,0.15)]'
-  const pulseSpeed = stressLevel > 70 ? 'duration-500' : stressLevel > 40 ? 'duration-1000' : 'duration-2000'
+  const glowIntensity =
+    stressLevel > 70
+      ? 'shadow-[0_0_30px_rgba(249,115,22,0.45)]'
+      : 'shadow-[0_0_15px_rgba(249,115,22,0.15)]'
+  const pulseSpeed =
+    stressLevel > 70 ? 'duration-500' : stressLevel > 40 ? 'duration-1000' : 'duration-2000'
 
   return (
-    <div className={`relative flex items-center justify-center w-52 h-52 mx-auto rounded-full transition-all ${pulseSpeed} ${glowIntensity}`}>
-      {/* Outer subtle rotating ring */}
+    <div
+      className={`relative flex items-center justify-center w-52 h-52 mx-auto rounded-full transition-all ${pulseSpeed} ${glowIntensity}`}
+    >
       <svg
         className={`absolute inset-0 w-full h-full pointer-events-none transition-transform ${
           stressLevel > 70 ? 'animate-spin [animation-duration:8s]' : 'animate-slow-rotate'
@@ -89,7 +96,6 @@ function RadialGauge({ value, stressLevel }) {
         />
       </svg>
 
-      {/* Radiating Ticks Gauge */}
       <svg className="w-48 h-48" viewBox="0 0 192 192">
         {ticks.map((t) => (
           <line
@@ -109,7 +115,6 @@ function RadialGauge({ value, stressLevel }) {
         ))}
       </svg>
 
-      {/* Center Readout */}
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
         <span className="text-[10px] font-medium tracking-[0.25em] text-neutral-500 uppercase">
           Total Load
@@ -139,7 +144,7 @@ function RadialGauge({ value, stressLevel }) {
   )
 }
 
-// Left Card: Telemetry & Detailed Metric Rows
+// Left Card: Telemetry & Detailed Metric Rows (Including NET DL & NET UL)
 function TelemetryCard({ metrics, totalLoad }) {
   const items = [
     {
@@ -174,11 +179,26 @@ function TelemetryCard({ metrics, totalLoad }) {
       status: (metrics.gpu_temp ?? 0) > 75 ? 'Warm' : 'Cool',
       statusColor: (metrics.gpu_temp ?? 0) > 75 ? 'text-rose-400 bg-rose-500/10' : 'text-neutral-400 bg-neutral-800/60',
     },
+    {
+      label: 'NET DL',
+      raw: metrics.net_dl,
+      value: metrics.net_dl !== null ? `${metrics.net_dl} Mb/s` : '--',
+      icon: ArrowDown,
+      status: (metrics.net_dl ?? 0) > 1.0 ? 'Active' : 'Normal',
+      statusColor: (metrics.net_dl ?? 0) > 1.0 ? 'text-orange-400 bg-orange-500/10' : 'text-neutral-400 bg-neutral-800/60',
+    },
+    {
+      label: 'NET UL',
+      raw: metrics.net_ul,
+      value: metrics.net_ul !== null ? `${metrics.net_ul} Mb/s` : '--',
+      icon: ArrowUp,
+      status: (metrics.net_ul ?? 0) > 1.0 ? 'Active' : 'Normal',
+      statusColor: (metrics.net_ul ?? 0) > 1.0 ? 'text-orange-400 bg-orange-500/10' : 'text-neutral-400 bg-neutral-800/60',
+    },
   ]
 
   return (
     <div className="rounded-3xl bg-[#161616] border border-[#232323] p-6 flex flex-col justify-between shadow-2xl transition-all duration-300">
-      {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-[#232323]">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
@@ -189,12 +209,10 @@ function TelemetryCard({ metrics, totalLoad }) {
         <span className="text-[10px] text-neutral-500 font-mono">0.5 HZ SYNC</span>
       </div>
 
-      {/* Center Radial Dial */}
       <div className="py-6">
         <RadialGauge value={totalLoad} stressLevel={totalLoad} />
       </div>
 
-      {/* Granular Breakdown List */}
       <div className="space-y-2.5 pt-2">
         {items.map((m) => {
           const Icon = m.icon
@@ -231,11 +249,17 @@ function TelemetryCard({ metrics, totalLoad }) {
   )
 }
 
-// Right Card: Interactive Quick Launch & Power Animations
-function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
+// Right Card: Interactive Quick Launch, Screen Mirror Row, and Reset
+function ActionCard({
+  onLaunch,
+  loadingAppId,
+  totalLoad,
+  onReset,
+  onStartStream,
+  isStreaming,
+}) {
   return (
     <div className="rounded-3xl bg-[#161616] border border-[#232323] p-6 flex flex-col justify-between shadow-2xl transition-all duration-300">
-      {/* Top Header & Dynamic Progress Indicator */}
       <div>
         <div className="flex items-center justify-between pb-3">
           <div className="flex items-center gap-2">
@@ -244,11 +268,10 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
             </h2>
           </div>
           <span className="text-[10px] text-orange-400 uppercase font-mono tracking-wider">
-            {loadingAppId ? 'Process Spawning' : 'Standing By'}
+            {loadingAppId ? 'Process Spawning' : isStreaming ? 'Cast Active' : 'Standing By'}
           </span>
         </div>
 
-        {/* Live progress indicator bar tied to system/launcher activity */}
         <div className="w-full bg-[#202020] h-1.5 rounded-full overflow-hidden mb-6 border border-[#282828]">
           <div
             className="h-full bg-gradient-to-r from-orange-600 via-orange-500 to-amber-400 transition-all duration-700 rounded-full"
@@ -256,8 +279,47 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
           />
         </div>
 
-        {/* Pulsing Action List */}
         <div className="space-y-3">
+          {/* Screen Mirror Action Row */}
+          <div className="p-4 rounded-2xl bg-[#1b1b1b] border border-[#252525] hover:border-[#333333] transition-all flex items-center justify-between group">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-[#222222] border border-[#2e2e2e] flex items-center justify-center text-neutral-400">
+                <Monitor className="w-4 h-4 text-orange-400" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-gray-100 group-hover:text-white transition-colors">
+                  Screen Mirror
+                </div>
+                <div className="text-[11px] text-neutral-500 tracking-wide mt-0.5">
+                  Live Display
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onStartStream}
+              className={`px-4 py-1.5 rounded-full text-xs font-semibold tracking-wide transition-all active:scale-95 flex items-center justify-center gap-1.5 min-w-[94px] ${
+                isStreaming
+                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40 shadow-[0_0_12px_rgba(249,115,22,0.2)]'
+                  : 'bg-white text-black hover:bg-neutral-200 shadow-sm'
+              }`}
+            >
+              {isStreaming ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin text-orange-400" />
+                  <span className="text-[11px]">Streaming...</span>
+                </>
+              ) : (
+                <>
+                  <span>View</span>
+                  <ArrowUpRight className="w-3 h-3 opacity-60" />
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Application Launch Rows */}
           {APPS.map((app) => {
             const isLoading = loadingAppId === app.id
             const isAnyLoading = loadingAppId !== null
@@ -267,7 +329,6 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
                 key={app.id}
                 className="p-4 rounded-2xl bg-[#1b1b1b] border border-[#252525] hover:border-[#333333] transition-all flex items-center justify-between group"
               >
-                {/* Left: Names & micro-label */}
                 <div>
                   <div className="text-sm font-semibold text-gray-100 group-hover:text-white transition-colors">
                     {app.name}
@@ -277,9 +338,7 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
                   </div>
                 </div>
 
-                {/* Right: Dotted Indicator Dots + Launch Button */}
                 <div className="flex items-center gap-4">
-                  {/* Flowing animated dots indicating app power level */}
                   <div className="hidden sm:flex items-center gap-1">
                     {Array.from({ length: app.totalDots }).map((_, dotIdx) => {
                       const isLit = dotIdx < app.powerLevel
@@ -292,7 +351,9 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
                               : 'bg-neutral-800'
                           }`}
                           style={{
-                            animation: isLit ? `flow-dots ${app.pulseSpeed} infinite ease-in-out` : 'none',
+                            animation: isLit
+                              ? `flow-dots ${app.pulseSpeed} infinite ease-in-out`
+                              : 'none',
                             animationDelay: `${dotIdx * 0.12}s`,
                           }}
                         />
@@ -300,7 +361,6 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
                     })}
                   </div>
 
-                  {/* Crisp Pill Launch Button */}
                   <button
                     type="button"
                     disabled={isAnyLoading}
@@ -330,7 +390,6 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
         </div>
       </div>
 
-      {/* Large Bottom Primary Reset All / Refresh Button */}
       <div className="pt-6">
         <button
           type="button"
@@ -345,20 +404,80 @@ function ActionCard({ onLaunch, loadingAppId, totalLoad, onReset }) {
   )
 }
 
+// True-black Screen Mirror Modal Overlay
+function ScreenMirrorModal({ frameData, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black z-50 p-4 flex flex-col justify-between selection:bg-orange-500/20 antialiased">
+      {/* Top Bar */}
+      <div className="max-w-4xl w-full mx-auto flex items-center justify-between pb-3 border-b border-[#202020]">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)] animate-pulse" />
+          <span className="text-xs font-semibold text-neutral-300 tracking-wider uppercase">
+            Live Screen Cast
+          </span>
+          <span className="text-[10px] text-neutral-500 font-mono">5 FPS • JPEG 50%</span>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1.5 rounded-full bg-[#161616] border border-[#282828] text-neutral-400 hover:text-white transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Screen Frame Container */}
+      <div className="flex-1 max-w-4xl w-full mx-auto flex items-center justify-center my-4 overflow-hidden rounded-2xl border border-[#222222] bg-[#0a0a0a] relative">
+        {frameData ? (
+          <img
+            src={`data:image/jpeg;base64,${frameData}`}
+            alt="Remote Screen Frame"
+            className="w-full h-full object-contain select-none"
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-3 text-neutral-500">
+            <Loader2 className="w-8 h-8 animate-spin text-orange-400" />
+            <span className="text-xs font-mono uppercase tracking-widest">
+              Connecting video stream...
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Close Button */}
+      <div className="max-w-4xl w-full mx-auto pt-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full py-3.5 px-6 rounded-full bg-[#181818] border border-[#2d2d2d] hover:bg-[#202020] text-neutral-200 hover:text-white text-xs font-semibold uppercase tracking-widest transition-all active:scale-95 shadow-xl flex items-center justify-center gap-2"
+        >
+          <X className="w-4 h-4 text-orange-400" />
+          <span>Close Connection</span>
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [metrics, setMetrics] = useState({
     cpu_percent: null,
     ram_percent: null,
     gpu_load_percent: null,
     gpu_temp: null,
+    net_dl: null,
+    net_ul: null,
   })
   const [isConnected, setIsConnected] = useState(false)
   const [loadingAppId, setLoadingAppId] = useState(null)
   const [toast, setToast] = useState(null)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [screenFrame, setScreenFrame] = useState(null)
+
   const socketRef = useRef(null)
   const toastTimeoutRef = useRef(null)
 
-  // Compute Total Load = (CPU + RAM + GPU Load) / 3
   const totalLoad = useMemo(() => {
     const cpu = metrics.cpu_percent ?? 0
     const ram = metrics.ram_percent ?? 0
@@ -386,6 +505,7 @@ export default function App() {
 
     socket.on('disconnect', () => {
       setIsConnected(false)
+      setIsStreaming(false)
     })
 
     socket.on('system_metrics', (data) => {
@@ -395,8 +515,20 @@ export default function App() {
           ram_percent: data.ram_percent,
           gpu_load_percent: data.gpu_load_percent,
           gpu_temp: data.gpu_temp,
+          net_dl: data.net_dl ?? 0,
+          net_ul: data.net_ul ?? 0,
         })
       }
+    })
+
+    socket.on('screen_frame', (data) => {
+      if (data?.frame) {
+        setScreenFrame(data.frame)
+      }
+    })
+
+    socket.on('stream_status', (data) => {
+      setIsStreaming(Boolean(data?.active))
     })
 
     socket.on('launch_status', (data) => {
@@ -431,14 +563,31 @@ export default function App() {
     setLoadingAppId(appId)
     socketRef.current.emit('launch_app', { appId })
 
-    // Safety timeout in case backend drops event
     setTimeout(() => {
       setLoadingAppId((curr) => (curr === appId ? null : curr))
     }, 8000)
   }
 
+  const handleStartStream = () => {
+    if (!socketRef.current || !isConnected) {
+      showToast('Host disconnected', 'error')
+      return
+    }
+    setIsStreaming(true)
+    socketRef.current.emit('start_screen_stream')
+  }
+
+  const handleStopStream = () => {
+    setIsStreaming(false)
+    setScreenFrame(null)
+    if (socketRef.current) {
+      socketRef.current.emit('stop_screen_stream')
+    }
+  }
+
   const handleResetAll = () => {
     setLoadingAppId(null)
+    handleStopStream()
     showToast('Telemetry & controls refreshed', 'success')
   }
 
@@ -463,7 +612,7 @@ export default function App() {
         )}
       </header>
 
-      {/* Main Responsive Grid Layout (Left: Telemetry & Resources, Right: Quick Launch & Actions) */}
+      {/* Main Grid: Left Telemetry, Right Quick Launch & Screen Mirror */}
       <section className="max-w-6xl w-full mx-auto grid grid-cols-1 lg:grid-cols-2 gap-6 my-auto">
         <TelemetryCard metrics={metrics} totalLoad={totalLoad} />
         <ActionCard
@@ -471,8 +620,15 @@ export default function App() {
           loadingAppId={loadingAppId}
           totalLoad={totalLoad}
           onReset={handleResetAll}
+          onStartStream={handleStartStream}
+          isStreaming={isStreaming}
         />
       </section>
+
+      {/* Screen Mirror Modal */}
+      {isStreaming && (
+        <ScreenMirrorModal frameData={screenFrame} onClose={handleStopStream} />
+      )}
 
       {/* Floating Toast Notification Pill */}
       {toast && (
