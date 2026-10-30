@@ -1,6 +1,7 @@
 import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
+from flask_socketio import SocketIO
 import psutil
 
 try:
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Prime psutil.cpu_percent so subsequent non-blocking calls return meaningful values
 psutil.cpu_percent(interval=None)
@@ -24,7 +26,6 @@ def get_system_stats():
         dict: System telemetry with cpu_percent, ram_percent, gpu_load_percent,
               and gpu_temp. Defaults GPU fields to 0 if unavailable or if an error occurs.
     """
-    # CPU & RAM telemetry
     cpu_percent = psutil.cpu_percent(interval=None)
     ram_percent = psutil.virtual_memory().percent
 
@@ -36,7 +37,6 @@ def get_system_stats():
             gpus = GPUtil.getGPUs()
             if gpus:
                 primary_gpu = gpus[0]
-                # GPUtil returns load as a decimal (0.0 - 1.0) or None
                 if primary_gpu.load is not None:
                     gpu_load_percent = round(primary_gpu.load * 100, 2)
                 if primary_gpu.temperature is not None:
@@ -52,16 +52,29 @@ def get_system_stats():
     }
 
 
+def emit_system_metrics():
+    """Background task continuously emitting system metrics every 2 seconds."""
+    while True:
+        stats = get_system_stats()
+        socketio.emit("system_metrics", stats)
+        socketio.sleep(2)
+
+
+background_task_started = False
+
+
+@socketio.on("connect")
+def handle_connect():
+    global background_task_started
+    if not background_task_started:
+        socketio.start_background_task(emit_system_metrics)
+        background_task_started = True
+
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
     return jsonify({"status": "ok", "message": "Server is running"})
 
 
-@app.route("/api/stats", methods=["GET"])
-def get_stats():
-    stats = get_system_stats()
-    return jsonify(stats)
-
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
