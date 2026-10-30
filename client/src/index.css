@@ -1,1 +1,38 @@
 @import "tailwindcss";
+
+@keyframes flow-dots {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes slow-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes reverse-rotate {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-slow-rotate {
+  animation: slow-rotate 24s linear infinite;
+}
+
+.animate-reverse-rotate {
+  animation: reverse-rotate 32s linear infinite;
+}
