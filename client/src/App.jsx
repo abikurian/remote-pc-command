@@ -377,7 +377,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    const socket = io('http://localhost:5000')
+    const socket = io('http://' + window.location.hostname + ':5000')
     socketRef.current = socket
 
     socket.on('connect', () => {
@@ -459,18 +459,21 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#161616] border border-[#232323]">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                isConnected
-                  ? 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]'
-                  : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-[11px] font-medium tracking-wide uppercase text-neutral-400">
-              {isConnected ? 'Telemetry Active' : 'Disconnected'}
-            </span>
-          </div>
+          {isConnected ? (
+            <div className="flex items-center gap-2 rounded-full border border-[#232323] bg-[#161616] px-3 py-1">
+              <span className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.8)]" />
+              <span className="text-[10px] text-neutral-400 uppercase tracking-widest font-medium">
+                Telemetry Active
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-full border border-[#232323] bg-[#161616] px-3 py-1">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-[10px] text-neutral-500 uppercase tracking-widest font-medium">
+                Telemetry Offline
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -484,12 +487,6 @@ export default function App() {
           onReset={handleResetAll}
         />
       </section>
-
-      {/* Footer Info */}
-      <footer className="max-w-6xl w-full mx-auto pt-6 flex items-center justify-between text-[11px] text-neutral-600 border-t border-[#181818] mt-6">
-        <span className="tracking-wide">Host Stream: ws://localhost:5000</span>
-        <span className="tracking-widest uppercase">Remote PC Hardware Interface</span>
-      </footer>
 
       {/* Floating Toast Notification Pill */}
       {toast && (
