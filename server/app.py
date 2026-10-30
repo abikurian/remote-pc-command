@@ -1,3 +1,4 @@
+import glob
 import logging
 import os
 import subprocess
@@ -17,25 +18,51 @@ app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-# Resolve common user path dynamically
+# Resolve common directories dynamically
 LOCALAPPDATA = os.environ.get("LOCALAPPDATA", "")
 PROGRAMFILES = os.environ.get("ProgramFiles", "C:\\Program Files")
 PROGRAMFILES_X86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
 
-# Strict server-side app registry
+# Resolve Blender executable path across installed versions
+def _find_blender_path():
+    blender_default = os.path.join(PROGRAMFILES, "Blender Foundation", "Blender 5.1", "blender.exe")
+    if os.path.exists(blender_default):
+        return blender_default
+    matches = glob.glob(os.path.join(PROGRAMFILES, "Blender Foundation", "Blender*", "blender.exe"))
+    return matches[0] if matches else os.path.join(PROGRAMFILES, "Blender Foundation", "Blender", "blender.exe")
+
+# Resolve Antigravity executable path
+def _find_antigravity_path():
+    # 1. Check direct Antigravity.exe in local AppData
+    direct_exe = os.path.join(LOCALAPPDATA, "Programs", "antigravity", "Antigravity.exe")
+    if os.path.exists(direct_exe):
+        return direct_exe
+    # 2. Check Antigravity IDE executable
+    ide_exe = os.path.join(LOCALAPPDATA, "Programs", "Antigravity IDE", "Antigravity IDE.exe")
+    if os.path.exists(ide_exe):
+        return ide_exe
+    # 3. Check CLI launcher cmd script
+    ide_cmd = os.path.join(LOCALAPPDATA, "Programs", "Antigravity IDE", "bin", "antigravity-ide.cmd")
+    if os.path.exists(ide_cmd):
+        return ide_cmd
+    return "YOUR_ANTIGRAVITY_PATH_HERE"
+
+# Strict server-side app registry for target applications
 APP_REGISTRY = {
-    "vscode": {
-        "name": "Visual Studio Code",
-        "path": os.path.join(LOCALAPPDATA, "Programs", "Microsoft VS Code", "Code.exe"),
+    "davinci": {
+        "name": "DaVinci Resolve",
+        "category": "Video Editor",
+        "path": os.path.join(PROGRAMFILES, "Blackmagic Design", "DaVinci Resolve", "Resolve.exe"),
     },
-    "emulator": {
-        "name": "BlueStacks",
-        "path": os.path.join(PROGRAMFILES, "BlueStacks_nxt", "HD-Player.exe"),
+    "blender": {
+        "name": "Blender",
+        "category": "3D Workspace",
+        "path": _find_blender_path(),
     },
-    "rdr2": {
-        "name": "Red Dead Redemption 2",
-        # PLACEHOLDER: Update with your exact RDR2.exe path if different
-        "path": "D:\\Games\\Red Dead Redemption 2\\RDR2.exe",
+    "antigravity": {
+        "name": "Antigravity",
+        "category": "AI Agent",
+        "path": _find_antigravity_path(),
     },
 }
 
@@ -126,20 +153,21 @@ def handle_launch_app(data):
     target_path = app_entry["path"]
     app_name = app_entry.get("name", app_id)
 
-    if not os.path.exists(target_path):
+    if not target_path or not os.path.exists(target_path):
         logger.error("Target executable not found: %s", target_path)
         socketio.emit(
             "launch_status",
             {
                 "status": "error",
                 "appId": app_id,
+                "name": app_name,
                 "message": f"Executable not found at {target_path}",
             },
         )
         return
 
     try:
-        # Non-blocking execution without shell=True to prevent shell injection or blocking
+        # Non-blocking execution without shell=True
         subprocess.Popen([target_path], shell=False)
         logger.info("Successfully launched %s (%s)", app_name, app_id)
         socketio.emit(
@@ -158,6 +186,7 @@ def handle_launch_app(data):
             {
                 "status": "error",
                 "appId": app_id,
+                "name": app_name,
                 "message": f"Failed to launch: {str(exc)}",
             },
         )
